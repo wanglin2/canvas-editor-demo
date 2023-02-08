@@ -39,5 +39,7 @@ onMounted(() => {
 .editorContainer {
   display: flex;
   flex-direction: column;
+  height: max-content;
+  position: relative;
 }
 </style>
