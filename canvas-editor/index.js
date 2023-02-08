@@ -78,7 +78,6 @@ class CanvasEditor {
       // 更新当前页绘制到的高度
       renderHeight += row.height
     })
-    console.log(this.positionList)
   }
 
   // 渲染页面中的一行
@@ -217,7 +216,6 @@ class CanvasEditor {
         })
       }
     })
-    console.log(rows)
     this.rows = rows
   }
 
@@ -311,16 +309,39 @@ class CanvasEditor {
   }
 
   // 获取光标位置信息
-  getCursorInfo(position) {
-    let { fontSize } = this.options
+  getCursorInfo(positionIndex) {
+    let position = this.positionList[positionIndex]
+    let { fontSize, pagePadding, lineHeight } = this.options
     // 光标高度在字号的基础上再高一点
-    let height = position.size || fontSize
+    let height = (position ? position.size : null) || fontSize
     let plusHeight = height / 2
     let actHeight = height + plusHeight
+    if (!position) {
+      // 当前光标位置处没有元素
+      let next = this.positionList[positionIndex + 1]
+      if (next) {
+        // 存在下一个元素
+        let nextCursorInfo = this.getCursorInfo(positionIndex + 1)
+        return {
+          x: pagePadding[3],
+          y: nextCursorInfo.y,
+          height: nextCursorInfo.height
+        }
+      } else {
+        // 不存在下一个元素，即文档为空
+        return {
+          x: pagePadding[3],
+          y: pagePadding[0] + (height * lineHeight - actHeight) / 2,
+          height: actHeight
+        }
+      }
+    }
+    // 是否是换行符
+    let isNewlineCharacter = position.value === '\n'
     // 元素所在行
     let row = this.rows[position.rowIndex]
     return {
-      x: position.rect.rightTop[0],
+      x: isNewlineCharacter ? position.rect.leftTop[0] : position.rect.rightTop[0],
       y:
         position.rect.rightTop[1] +
         row.height -
@@ -334,7 +355,7 @@ class CanvasEditor {
   // 计算光标位置及渲染光标
   computeAndRenderCursor(positionIndex, pageIndex) {
     // 根据元素索引计算出光标位置和高度信息
-    let cursorInfo = this.getCursorInfo(this.positionList[positionIndex])
+    let cursorInfo = this.getCursorInfo(positionIndex)
     // 渲染光标
     let cursorPos = this.canvasToContainer(
       cursorInfo.x,
@@ -433,7 +454,6 @@ class CanvasEditor {
 
   // 按键事件
   onKeydown(e) {
-    console.log(e)
     if (e.keyCode === 8) {
       this.delete()
     }

@@ -35,7 +35,7 @@ const data2 = [
   }
 ]
 
-const data = text.split('').map((item, index) => {
+let data = text.split('').map((item, index) => {
   switch (index) {
     case 6:
       return {
@@ -114,5 +114,7 @@ const data = text.split('').map((item, index) => {
       }
   }
 })
+
+// data = []
 
 export default data
