@@ -161,7 +161,7 @@ class CanvasEditor {
 
   // 计算行渲染数据
   computeRows() {
-    let { pageWidth, pagePadding, lineHeight } = this.options
+    let { pageWidth, pagePadding, lineHeight, fontSize } = this.options
     // 实际内容可用宽度
     let contentWidth = pageWidth - pagePadding[1] - pagePadding[3]
     // 创建一个临时canvas用来测量文本宽高
@@ -182,15 +182,25 @@ class CanvasEditor {
       let actLineHeight = lineheight || lineHeight
       // 获取文本宽高
       let font = this.getFontStr(item)
-      ctx.font = font
-      let { width, actualBoundingBoxAscent, actualBoundingBoxDescent } =
-        ctx.measureText(value)
       // 尺寸信息
       let info = {
-        width,
-        height: actualBoundingBoxAscent + actualBoundingBoxDescent,
-        ascent: actualBoundingBoxAscent,
-        descent: actualBoundingBoxDescent
+        width: 0,
+        height: 0,
+        ascent: 0,
+        descent: 0
+      }
+      if (value === '\n') {
+        // 如果是换行符，那么宽度为0，高度为字号
+        info.height = fontSize
+      } else {
+        // 其他字符
+        ctx.font = font
+        let { width, actualBoundingBoxAscent, actualBoundingBoxDescent } =
+          ctx.measureText(value)
+        info.width = width
+        info.height = actualBoundingBoxAscent + actualBoundingBoxDescent
+        info.ascent = actualBoundingBoxAscent
+        info.descent = actualBoundingBoxDescent
       }
       // 完整数据
       let element = {
@@ -341,7 +351,9 @@ class CanvasEditor {
     // 元素所在行
     let row = this.rows[position.rowIndex]
     return {
-      x: isNewlineCharacter ? position.rect.leftTop[0] : position.rect.rightTop[0],
+      x: isNewlineCharacter
+        ? position.rect.leftTop[0]
+        : position.rect.rightTop[0],
       y:
         position.rect.rightTop[1] +
         row.height -
@@ -379,10 +391,17 @@ class CanvasEditor {
     this.cursorEl.style.top = top + 'px'
     this.cursorEl.style.height = height + 'px'
     this.cursorEl.style.opacity = 1
-    this.blinkCursor(0)
     setTimeout(() => {
       this.focus()
+      this.cursorEl.style.display = 'block'
+      this.blinkCursor(0)
     }, 0)
+  }
+
+  // 隐藏光标
+  hideCursor() {
+    clearTimeout(this.cursorTimer)
+    this.cursorEl.style.display = 'none'
   }
 
   // 光标闪烁
@@ -407,6 +426,9 @@ class CanvasEditor {
         this.isCompositing = false
       })
       this.textareaEl.addEventListener('keydown', this.onKeydown.bind(this))
+      this.textareaEl.addEventListener('blur', () => {
+        this.hideCursor()
+      })
       document.body.appendChild(this.textareaEl)
     }
     this.textareaEl.focus()
@@ -436,7 +458,7 @@ class CanvasEditor {
         0,
         ...arr.map(item => {
           return {
-            ...cur,
+            ...(cur || {}),
             value: item
           }
         })
@@ -456,6 +478,8 @@ class CanvasEditor {
   onKeydown(e) {
     if (e.keyCode === 8) {
       this.delete()
+    } else if (e.keyCode === 13) {
+      this.newLine()
     }
   }
 
@@ -464,14 +488,28 @@ class CanvasEditor {
     if (this.cursorPositionIndex < 0) {
       return
     }
+    // 删除数据
     this.data.splice(this.cursorPositionIndex, 1)
+    // 重新渲染
     this.render()
+    // 更新光标
     this.cursorPositionIndex--
     let position = this.positionList[this.cursorPositionIndex]
     this.computeAndRenderCursor(
       this.cursorPositionIndex,
       position ? position.pageIndex : 0
     )
+  }
+
+  // 换行
+  newLine() {
+    this.data.splice(this.cursorPositionIndex + 1, 0, {
+      value: '\n'
+    })
+    this.render()
+    this.cursorPositionIndex++
+    let position = this.positionList[this.cursorPositionIndex]
+    this.computeAndRenderCursor(this.cursorPositionIndex, position.pageIndex)
   }
 
   // 将相对于浏览器窗口的坐标转换成相对于页面canvas
