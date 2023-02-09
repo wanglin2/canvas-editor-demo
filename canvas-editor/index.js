@@ -13,7 +13,9 @@ class CanvasEditor {
         color: '#333', // 文字颜色
         fontSize: 16, // 字号
         fontFamily: 'Yahei', // 字体
-        lineHeight: 1.5 // 行高，倍数
+        lineHeight: 1.5, // 行高，倍数
+        rangeColor: '#bbdfff', // 选区颜色
+        rangeOpacity: 0.6 // 选区透明度
       },
       options
     )
@@ -26,9 +28,13 @@ class CanvasEditor {
     this.cursorTimer = null // 光标元素闪烁的定时器
     this.textareaEl = null // 文本输入框元素
     this.isCompositing = false // 是否正在输入拼音
+    this.isMousedown = false // 鼠标是否按下
+    this.range = [] // 当前选区，第一个元素代表选区开始元素位置，第二个元素代表选区结束元素位置
 
     this.createPage(0)
     this.render()
+    document.body.addEventListener('mousemove', this.onMousemove.bind(this))
+    document.body.addEventListener('mouseup', this.onMouseup.bind(this))
   }
 
   // 渲染
@@ -82,7 +88,7 @@ class CanvasEditor {
 
   // 渲染页面中的一行
   renderRow(ctx, renderHeight, row, pageIndex, rowIndex) {
-    let { color, pagePadding } = this.options
+    let { color, pagePadding, rangeColor, rangeOpacity } = this.options
     // 内边距
     let offsetX = pagePadding[3]
     let offsetY = pagePadding[0]
@@ -148,6 +154,20 @@ class CanvasEditor {
           (row.height - row.originHeight) / 2 -
           row.descent
       )
+      // 渲染选区
+      if (this.range.length === 2 && this.range[0] !== this.range[1]) {
+        // 根据鼠标前后位置调整选区位置
+        let range = this.getRange()
+        let positionIndex = this.positionList.length - 1
+        if (positionIndex >= range[0] && positionIndex <= range[1]) {
+          ctx.save()
+          ctx.beginPath()
+          ctx.globalAlpha = rangeOpacity
+          ctx.fillStyle = rangeColor
+          ctx.fillRect(renderWidth, renderHeight, item.info.width, row.height)
+          ctx.restore()
+        }
+      }
       // 更新当前行绘制到的宽度
       renderWidth += item.info.width
       ctx.restore()
@@ -157,6 +177,30 @@ class CanvasEditor {
     // ctx.moveTo(pagePadding[3], renderHeight + row.height)
     // ctx.lineTo(673, renderHeight + row.height)
     // ctx.stroke()
+  }
+
+  // 获取选区
+  getRange() {
+    if (this.range.length < 2) {
+      return []
+    }
+    if (this.range[1] > this.range[0]) {
+      // 鼠标结束元素在开始元素后面，那么排除开始元素
+      return [this.range[0] + 1, this.range[1]]
+    } else if (this.range[1] < this.range[0]) {
+      // 鼠标结束元素在开始元素前面，那么排除结束元素
+      return [this.range[1] + 1, this.range[0]]
+    } else {
+      return []
+    }
+  }
+
+  // 清除选区
+  clearRange() {
+    if (this.range.length === 2) {
+      this.range = []
+      this.render()
+    }
   }
 
   // 计算行渲染数据
@@ -258,11 +302,13 @@ class CanvasEditor {
 
   // 页面鼠标按下事件
   onMousedown(e, pageIndex) {
+    this.isMousedown = true
     // 鼠标按下位置相对于页面canvas的坐标
     let { x, y } = this.windowToCanvas(e, this.pageCanvasList[pageIndex])
     // 计算该坐标对应的元素索引
     let positionIndex = this.getPositionByPos(x, y, pageIndex)
     this.cursorPositionIndex = positionIndex
+    this.range[0] = positionIndex
     // 计算光标位置及渲染
     this.computeAndRenderCursor(positionIndex, pageIndex)
     // 光标测试辅助线
@@ -270,6 +316,36 @@ class CanvasEditor {
     // ctx.moveTo(cursorInfo.x, cursorInfo.y)
     // ctx.lineTo(cursorInfo.x, cursorInfo.y + cursorInfo.height)
     // ctx.stroke()
+  }
+
+  // 鼠标移动事件
+  onMousemove(e) {
+    if (!this.isMousedown) {
+      return
+    }
+    // 鼠标当前所在页面
+    let pageIndex = this.getPosInPageIndex(e.clientX, e.clientY)
+    if (pageIndex === -1) {
+      return
+    }
+    // 鼠标位置相对于页面canvas的坐标
+    let { x, y } = this.windowToCanvas(e, this.pageCanvasList[pageIndex])
+    // 鼠标位置对应的元素索引
+    let positionIndex = this.getPositionByPos(x, y, pageIndex)
+    if (positionIndex !== -1) {
+      this.range[1] = positionIndex
+      if (Math.abs(this.range[1] - this.range[0]) > 0) {
+        // 选区大于1，光标就不显示
+        this.cursorPositionIndex = -1
+        this.hideCursor()
+      }
+      this.render()
+    }
+  }
+
+  // 鼠标松开事件
+  onMouseup() {
+    this.isMousedown = false
   }
 
   // 获取某个坐标所在的元素
@@ -379,6 +455,7 @@ class CanvasEditor {
 
   // 设置光标
   setCursor(left, top, height) {
+    this.clearRange()
     clearTimeout(this.cursorTimer)
     if (!this.cursorEl) {
       this.cursorEl = document.createElement('div')
@@ -452,6 +529,11 @@ class CanvasEditor {
       // 插入字符
       let arr = data.split('')
       let length = arr.length
+      let range = this.getRange()
+      if (range.length > 0) {
+        // 存在选区，则替换选区的内容
+        this.delete()
+      }
       let cur = this.positionList[this.cursorPositionIndex]
       this.data.splice(
         this.cursorPositionIndex + 1,
@@ -486,14 +568,23 @@ class CanvasEditor {
   // 删除
   delete() {
     if (this.cursorPositionIndex < 0) {
-      return
+      let range = this.getRange()
+      if (range.length > 0) {
+        // 存在选区，删除选区内容
+        let length = range[1] - range[0] + 1
+        this.data.splice(range[0], length)
+        this.cursorPositionIndex = range[0] - 1
+      } else {
+        return
+      }
+    } else {
+      // 删除数据
+      this.data.splice(this.cursorPositionIndex, 1)
+      // 重新渲染
+      this.render()
+      // 更新光标
+      this.cursorPositionIndex--
     }
-    // 删除数据
-    this.data.splice(this.cursorPositionIndex, 1)
-    // 重新渲染
-    this.render()
-    // 更新光标
-    this.cursorPositionIndex--
     let position = this.positionList[this.cursorPositionIndex]
     this.computeAndRenderCursor(
       this.cursorPositionIndex,
@@ -510,6 +601,27 @@ class CanvasEditor {
     this.cursorPositionIndex++
     let position = this.positionList[this.cursorPositionIndex]
     this.computeAndRenderCursor(this.cursorPositionIndex, position.pageIndex)
+  }
+
+  // 获取一个坐标在哪个页面
+  getPosInPageIndex(x, y) {
+    let { left, top, right, bottom } = this.container.getBoundingClientRect()
+    // 不在容器范围内
+    if (x < left || x > right || y < top || y > bottom) {
+      return -1
+    }
+    let { pageHeight, pageMargin } = this.options
+    let scrollTop = this.container.scrollTop
+    // 鼠标的y坐标相对于容器顶部的距离
+    let totalTop = y - top + scrollTop
+    for (let i = 0; i < this.pageCanvasList.length; i++) {
+      let pageStartTop = i * (pageHeight + pageMargin)
+      let pageEndTop = pageStartTop + pageHeight
+      if (totalTop >= pageStartTop && totalTop <= pageEndTop) {
+        return i
+      }
+    }
+    return -1
   }
 
   // 将相对于浏览器窗口的坐标转换成相对于页面canvas
