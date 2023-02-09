@@ -30,6 +30,11 @@ class CanvasEditor {
     this.isCompositing = false // 是否正在输入拼音
     this.isMousedown = false // 鼠标是否按下
     this.range = [] // 当前选区，第一个元素代表选区开始元素位置，第二个元素代表选区结束元素位置
+    this.mousemoveTimer = null
+    this.listeners = {
+      mousedown: null,
+      rangeChange: null
+    }
 
     this.createPage(0)
     this.render()
@@ -197,7 +202,7 @@ class CanvasEditor {
 
   // 清除选区
   clearRange() {
-    if (this.range.length === 2) {
+    if (this.range.length > 0) {
       this.range = []
       this.render()
     }
@@ -308,9 +313,12 @@ class CanvasEditor {
     // 计算该坐标对应的元素索引
     let positionIndex = this.getPositionByPos(x, y, pageIndex)
     this.cursorPositionIndex = positionIndex
-    this.range[0] = positionIndex
     // 计算光标位置及渲染
     this.computeAndRenderCursor(positionIndex, pageIndex)
+    this.range[0] = positionIndex
+    if (this.listeners.mousedown) {
+      this.listeners.mousedown(positionIndex)
+    }
     // 光标测试辅助线
     // let ctx = this.pageCanvasCtxList[pageIndex]
     // ctx.moveTo(cursorInfo.x, cursorInfo.y)
@@ -320,27 +328,38 @@ class CanvasEditor {
 
   // 鼠标移动事件
   onMousemove(e) {
-    if (!this.isMousedown) {
+    this.mousemoveEvent = e
+    if (this.mousemoveTimer) {
       return
     }
-    // 鼠标当前所在页面
-    let pageIndex = this.getPosInPageIndex(e.clientX, e.clientY)
-    if (pageIndex === -1) {
-      return
-    }
-    // 鼠标位置相对于页面canvas的坐标
-    let { x, y } = this.windowToCanvas(e, this.pageCanvasList[pageIndex])
-    // 鼠标位置对应的元素索引
-    let positionIndex = this.getPositionByPos(x, y, pageIndex)
-    if (positionIndex !== -1) {
-      this.range[1] = positionIndex
-      if (Math.abs(this.range[1] - this.range[0]) > 0) {
-        // 选区大于1，光标就不显示
-        this.cursorPositionIndex = -1
-        this.hideCursor()
+    this.mousemoveTimer = setTimeout(() => {
+      this.mousemoveTimer = null
+      if (!this.isMousedown) {
+        return
       }
-      this.render()
-    }
+      e = this.mousemoveEvent
+      // 鼠标当前所在页面
+      let pageIndex = this.getPosInPageIndex(e.clientX, e.clientY)
+      if (pageIndex === -1) {
+        return
+      }
+      // 鼠标位置相对于页面canvas的坐标
+      let { x, y } = this.windowToCanvas(e, this.pageCanvasList[pageIndex])
+      // 鼠标位置对应的元素索引
+      let positionIndex = this.getPositionByPos(x, y, pageIndex)
+      if (positionIndex !== -1) {
+        this.range[1] = positionIndex
+        if (this.listeners.rangeChange) {
+          this.listeners.rangeChange(this.getRange())
+        }
+        if (Math.abs(this.range[1] - this.range[0]) > 0) {
+          // 选区大于1，光标就不显示
+          this.cursorPositionIndex = -1
+          this.hideCursor()
+        }
+        this.render()
+      }
+    }, 100)
   }
 
   // 鼠标松开事件
