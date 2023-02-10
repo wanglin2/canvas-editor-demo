@@ -43,11 +43,13 @@ class CanvasEditor {
   }
 
   // 渲染
-  render() {
+  render(notComputeRows) {
     this.clear()
-    this.rows = []
     this.positionList = []
-    this.computeRows()
+    if (!notComputeRows) {
+      this.rows = []
+      this.computeRows()
+    }
     this.renderPage()
   }
 
@@ -357,7 +359,7 @@ class CanvasEditor {
           this.cursorPositionIndex = -1
           this.hideCursor()
         }
-        this.render()
+        this.render(true)
       }
     }, 100)
   }
