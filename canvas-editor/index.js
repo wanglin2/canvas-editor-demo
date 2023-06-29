@@ -292,8 +292,11 @@ class CanvasEditor {
   createPage(pageIndex) {
     let { pageWidth, pageHeight, pageMargin } = this.options
     let canvas = document.createElement('canvas')
-    canvas.width = pageWidth
-    canvas.height = pageHeight
+    const dpr = window.devicePixelRatio
+    canvas.width = pageWidth * dpr
+    canvas.height = pageHeight * dpr
+    canvas.style.width = pageWidth + 'px'
+    canvas.style.height = pageHeight + 'px'
     canvas.style.cursor = 'text'
     canvas.style.backgroundColor = '#fff'
     canvas.style.boxShadow = '#9ea1a566 0 2px 12px'
@@ -303,6 +306,7 @@ class CanvasEditor {
     })
     this.container.appendChild(canvas)
     let ctx = canvas.getContext('2d')
+    ctx.scale(dpr, dpr)
     this.pageCanvasList.push(canvas)
     this.pageCanvasCtxList.push(ctx)
   }
